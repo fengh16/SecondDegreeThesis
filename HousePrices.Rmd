@@ -1,0 +1,223 @@
+---
+title: "用计量方法研究房价与工资、GDP等因素的关系"
+author: "冯昊"
+date: "2/25/2020"
+output: html_document
+---
+
+```{r setup, echo=TRUE}
+library(ggplot2)
+library(knitr)
+library(corrplot)
+library(stargazer)
+library(jtools)
+library(lmtest)
+```
+
+## 数据来源
+
+从CSMAR下载数据。
+
+```{r echo=TRUE}
+house_data = read.table("data/分省份95-18年度房产.txt", fileEncoding="GB2312", header=TRUE)
+house_data$商品房单价 = house_data$商品房销售额 / house_data$商品房销售面积
+house_data = house_data[, c("年度标识", "省份名称", "商品房单价")]
+
+wage_data = read.table("data/分省份工资.txt", fileEncoding="utf8", header=T)
+
+all_data = merge(house_data, wage_data)
+
+ggplot(all_data , aes(职工平均货币工资合计, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method = "lm")+ 
+  ggtitle('Wage - House Price') +
+  xlab('Wage') +
+  ylab('House Price')
+
+beijing_data = all_data[which(all_data$省份名称 == '北京市'), ]
+ggplot(beijing_data , aes(职工平均货币工资合计, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method = "lm")+ 
+  ggtitle('Wage - House Price in Beijing') +
+  xlab('Wage') +
+  ylab('House Price')
+```
+
+```{r echo=TRUE}
+GDP_data = read.table("data/分省份GDP含房地产业和人均.txt", fileEncoding="utf8", header=TRUE)
+all_data_with_GDP = merge(all_data, GDP_data)
+all_data_with_GDP$房地产业GDP占比 = all_data_with_GDP$地区生产总值.房地产业 / all_data_with_GDP$地区生产总值 * 100
+```
+
+```{r echo=TRUE}
+# 为了避免一些中文的显示问题，在这换成英文
+all_data_with_GDP$house_price = all_data_with_GDP$商品房单价
+all_data_with_GDP$GDP = all_data_with_GDP$地区生产总值
+all_data_with_GDP$GDP_per_person = all_data_with_GDP$人均地区生产总值
+all_data_with_GDP$proportion_primary_in_GDP = all_data_with_GDP$第一产业占GDP比重...
+all_data_with_GDP$proportion_secondary_in_GDP = all_data_with_GDP$第二产业占GDP比重...
+all_data_with_GDP$proportion_tertiary_in_GDP = all_data_with_GDP$第三产业占GDP比重...
+all_data_with_GDP$proportion_real_estate_in_GDP = all_data_with_GDP$房地产业GDP占比
+all_data_with_GDP$wage = all_data_with_GDP$职工平均货币工资合计
+```
+
+```{r echo=TRUE}
+ggplot(all_data_with_GDP , aes(人均地区生产总值, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method = "lm")+ 
+  ggtitle('GDP per person - House Price') +
+  xlab('GDP per person') +
+  ylab('House Price')
+
+beijing_data_with_GDP = all_data_with_GDP[which(all_data_with_GDP$省份名称 == '北京市'), ]
+ggplot(beijing_data_with_GDP , aes(人均地区生产总值, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method = "lm")+ 
+  ggtitle('GDP per person - House Price in Beijing') +
+  xlab('GDP per person') +
+  ylab('House Price')
+
+```
+
+## 可视化
+
+```{r echo=T}
+cortable = cor(subset(all_data_with_GDP, select = c(商品房单价,地区生产总值,人均地区生产总值,第一产业占GDP比重...,第二产业占GDP比重...,第三产业占GDP比重...,职工平均货币工资合计)))
+kable(round(cortable, 2))
+```
+
+```{r echo=TRUE}
+# cortable = cor(subset(all_data_with_GDP, select = c(house_price,GDP,GDP_per_person,proportion_primary_in_GDP,proportion_secondary_in_GDP,proportion_tertiary_in_GDP,wage)))
+corrplot(cortable, method="circle")
+```
+
+## 回归
+
+```{r echo=TRUE}
+m1 <- lm('商品房单价~地区生产总值', all_data_with_GDP)
+m1_ <- lm('商品房单价~人均地区生产总值', all_data_with_GDP)
+m2 <- lm('商品房单价~人均地区生产总值+第一产业占GDP比重...+第三产业占GDP比重...', all_data_with_GDP)
+m3 <- lm('商品房单价~人均地区生产总值+房地产业GDP占比', all_data_with_GDP)
+m4 <- lm('商品房单价~职工平均货币工资合计', all_data_with_GDP)
+m5 <- lm('商品房单价~人均地区生产总值+第一产业占GDP比重...+第三产业占GDP比重...+职工平均货币工资合计', all_data_with_GDP)
+```
+
+```{r echo=TRUE, results='asis'}
+stargazer(m1, m1_, m2, m3, m4, m5, type = "html",
+          title = "Result using all of the data", align=TRUE,
+          column.labels = c("Model 1", "Model 1'", "Model 2", "Model 3", "Model 4", "Model 5"))
+```
+
+``` {r echo=TRUE}
+m1 <- lm('house_price~GDP', all_data_with_GDP)
+m1_ <- lm('house_price~GDP_per_person', all_data_with_GDP)
+m2 <- lm('house_price~GDP_per_person+proportion_primary_in_GDP+proportion_tertiary_in_GDP', all_data_with_GDP)
+m3 <- lm('house_price~GDP_per_person+proportion_real_estate_in_GDP', all_data_with_GDP)
+m4 <- lm('house_price~wage', all_data_with_GDP)
+m5 <- lm('house_price~GDP_per_person+proportion_primary_in_GDP+proportion_tertiary_in_GDP+wage', all_data_with_GDP)
+suppressMessages(plot_coefs(m1, m1_, m2, m4, m5, model.names=c("Model 1", "Model 1'", "Model 2", "Model 4", "Model 5")) + labs(x = "Beta Estimators", y = NULL) + labs(title='95% Confidence Interval'))
+```
+
+``` {r echo=TRUE}
+suppressMessages(plot_coefs(m1, m1_, m2, m4, m5, model.names=c("Model 1", "Model 1'", "Model 2", "Model 4", "Model 5"), coefs=c('GDP', 'GDP_per_person', 'wage')) + labs(x = "Beta Estimators", y = NULL) + labs(title='95% Confidence Interval'))
+```
+
+用北京的数据：
+
+```{r echo=TRUE}
+m1 <- lm('商品房单价~地区生产总值', beijing_data_with_GDP)
+m1_ <- lm('商品房单价~人均地区生产总值', beijing_data_with_GDP)
+m2 <- lm('商品房单价~人均地区生产总值+第一产业占GDP比重...+第三产业占GDP比重...', beijing_data_with_GDP)
+m3 <- lm('商品房单价~人均地区生产总值+房地产业GDP占比', beijing_data_with_GDP)
+m4 <- lm('商品房单价~职工平均货币工资合计', beijing_data_with_GDP)
+m5 <- lm('商品房单价~人均地区生产总值+第一产业占GDP比重...+第三产业占GDP比重...+职工平均货币工资合计', beijing_data_with_GDP)
+```
+
+```{r echo=TRUE, results='asis'}
+stargazer(m1, m1_, m2, m3, m4, m5, type = "html",
+          title = "Result using all of the data", align=TRUE,
+          column.labels = c("模型1", "模型1'", "模型2", "模型3", "模型4", "模型5"))
+```
+
+## 不同省份数据对比
+
+``` {r echo=TRUE}
+provinces = unique(all_data_with_GDP$省份名称)
+result = data.frame(省份=c(), 人均GDP前系数=c(), 人均GDP常数项=c(), 工资前系数=c(), 工资常数项=c())
+for (i in provinces) {
+  this_province_data_with_GDP = all_data_with_GDP[which(all_data_with_GDP$省份名称 == i), ]
+  fit1_ <- lm('商品房单价~人均地区生产总值', this_province_data_with_GDP)
+  fit4 <- lm('商品房单价~职工平均货币工资合计', this_province_data_with_GDP)
+  this_province_result = data.frame(省份=c(i), 人均GDP前系数=c(round(fit1_$coefficients[2], 4)), 人均GDP常数项=c(round(fit1_$coefficients[1], 2)), 工资前系数=c(round(fit4$coefficients[2], 4)), 工资常数项=c(round(fit4$coefficients[1], 2)))
+  result = rbind(result, this_province_result)
+}
+write.csv(result, 'data/province_result.csv')
+```
+
+## 北京、上海和全国的比较
+
+``` {r echo=TRUE}
+ggplot(all_data_with_GDP[which(all_data_with_GDP$省份名称 == '北京市'), ] , aes(人均地区生产总值, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method="lm", colour='red')+
+  geom_point(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '上海市'), ], colour='blue', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '上海市'), ], method="lm", colour='blue')+
+  geom_point(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '中国'), ], colour='green', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '中国'), ], method="lm", colour='green')+
+  ggtitle('GDP per person - House Price in Beijing, Shanghai and China') +
+  xlab('GDP per person') +
+  ylab('House Price')
+```
+
+``` {r echo=TRUE}
+ggplot(all_data_with_GDP[which(all_data_with_GDP$省份名称 == '北京市'), ] , aes(职工平均货币工资合计, 商品房单价))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method="lm", colour='red')+
+  geom_point(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '上海市'), ], colour='blue', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '上海市'), ], method="lm", colour='blue')+
+  geom_point(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '中国'), ], colour='green', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(data=all_data_with_GDP[which(all_data_with_GDP$省份名称 == '中国'), ], method="lm", colour='green')+
+  ggtitle('Wage - House Price in Beijing, Shanghai and China') +
+  xlab('Wage') +
+  ylab('House Price')
+```
+
+## 增长率比较
+
+```{r echo=TRUE, results='asis'}
+fit1 <- lm('职工平均货币工资合计~年度标识', beijing_data_with_GDP)
+fit2 <- lm('商品房单价~年度标识', beijing_data_with_GDP)
+
+stargazer(fit1, fit2, type = "html",
+          title = "Grow rate", align=TRUE,
+          column.labels = c("Wage-Year", "HousePrice-Year"))
+```
+
+``` {r echo=TRUE}
+beijing_data_with_GDP$工资房价比值 = beijing_data_with_GDP$职工平均货币工资合计 / beijing_data_with_GDP$商品房单价
+
+ggplot(beijing_data_with_GDP , aes(年度标识, 工资房价比值))+
+  geom_point(colour='red', alpha=0.5, position=position_jitter(w=0.2))+
+  geom_smooth(method="lm", colour='red')+
+  ggtitle('Year - Wage / HousePrice in Beijing') +
+  xlab('Year') +
+  ylab('Wage / HousePrice')
+```
+
+## 房价预测
+
+```{r echo=TRUE}
+full_data <- all_data_with_GDP[which(all_data_with_GDP$省份名称 == '中国'), ]
+train_data <- full_data[which(full_data$年度标识 < 2016), ]
+train <- lm('商品房单价~人均地区生产总值+第一产业占GDP比重...+第三产业占GDP比重...+职工平均货币工资合计', train_data)
+trained_coeffients <- train$coefficients
+
+validate_data <- full_data[which(full_data$年度标识 >= 2016), ]
+validate_data$预测结果 <- trained_coeffients[1] + trained_coeffients[2] * validate_data$人均地区生产总值 + trained_coeffients[3] * validate_data$第一产业占GDP比重... + trained_coeffients[4] * validate_data$第三产业占GDP比重... + trained_coeffients[5] * validate_data$职工平均货币工资合计
+print(trained_coeffients)
+print(validate_data$预测结果)
+print(validate_data$商品房单价)
+print(validate_data$预测结果 - validate_data$商品房单价)
+print(validate_data$预测结果 / validate_data$商品房单价 - 1)
+```
+
